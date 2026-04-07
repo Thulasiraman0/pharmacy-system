@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pharmacy System - v2</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial; background: #f4f4f4; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; margin-bottom: 20px; text-align: center; }
+        .version { background: #fff3cd; padding: 10px; border-left: 4px solid #ffc107; margin-bottom: 20px; }
+        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #ffc107; color: black; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; }
+        button:hover { background: #e0a800; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 10px; border-bottom: 1px solid #ddd; }
+        th { background: #ffc107; }
+        .section { margin-top: 30px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="version">✓ Version: v2 - Billing & Generate Bill</div>
+    <h1>💳 Pharmacy System - Billing</h1>
+
+    <div class="row">
+        <div>
+            <h2>Add Medicine</h2>
+            <form id="medicineForm">
+                <div class="form-group">
+                    <label>Medicine Name:</label>
+                    <input type="text" id="name" required>
+                </div>
+                <div class="form-group">
+                    <label>Price:</label>
+                    <input type="number" id="price" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label>Quantity:</label>
+                    <input type="number" id="quantity" required>
+                </div>
+                <button type="submit">Add Medicine</button>
+            </form>
+        </div>
+
+        <div>
+            <h2>Create Bill</h2>
+            <div id="medicinesList"></div>
+            <button onclick="generateBill()" style="background:#28a745;color:white;margin-top:15px;">
+                Generate Bill
+            </button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Available Medicines</h2>
+        <table>
+            <thead>
+                <tr><th>ID</th><th>Name</th><th>Price</th><th>Stock</th></tr>
+            </thead>
+            <tbody id="medicinesBody"></tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Generated Bills</h2>
+        <table>
+            <thead>
+                <tr><th>Bill ID</th><th>Date</th><th>Total</th><th>Details</th></tr>
+            </thead>
+            <tbody id="billsBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    loadMedicines();
+    loadBills();
+});
+
+document.getElementById('medicineForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const data = {
+        name: document.getElementById('name').value,
+        price: parseFloat(document.getElementById('price').value),
+        quantity: parseInt(document.getElementById('quantity').value)
+    };
+
+    try {
+        const res = await fetch('/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (!res.ok) throw new Error("Failed to add medicine");
+
+        document.getElementById('medicineForm').reset();
+        loadMedicines();
+    } catch (err) {
+        alert(err.message);
+    }
+});
+
+async function loadMedicines() {
+    try {
+        const res = await fetch('/get-medicines');
+        const medicines = await res.json();
+
+        const tbody = document.getElementById('medicinesBody');
+        const billDiv = document.getElementById('medicinesList');
+
+        tbody.innerHTML = '';
+        billDiv.innerHTML = '<strong>Select medicines:</strong><br>';
+
+        medicines.forEach(m => {
+            // Table row
+            const row = `
+                <tr>
+                    <td>${m.id}</td>
+                    <td>${m.name}</td>
+                    <td>$${m.price}</td>
+                    <td>${m.quantity}</td>
+                </tr>`;
+            tbody.insertAdjacentHTML('beforeend', row);
+
+            // Checkbox
+            const checkbox = `
+                <input type="checkbox" value="${m.id}" class="medicine-check">
+                ${m.name} - $${m.price}<br>`;
+            billDiv.insertAdjacentHTML('beforeend', checkbox);
+        });
+
+    } catch (err) {
+        alert("Error loading medicines");
+    }
+}
+
+async function generateBill() {
+    const checked = document.querySelectorAll('.medicine-check:checked');
+
+    if (checked.length === 0) {
+        alert('Select at least one medicine');
+        return;
+    }
+
+    const items = Array.from(checked).map(c => ({
+        id: parseInt(c.value),
+        quantity: 1
+    }));
+
+    try {
+        const res = await fetch('/generate-bill', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items })
+        });
+
+        const result = await res.json();
+
+        alert(`Bill Generated! Total: $${result.bill.total}`);
+        loadBills();
+
+    } catch (err) {
+        alert("Error generating bill");
+    }
+}
+
+async function loadBills() {
+    try {
+        const res = await fetch('/get-bills');
+        const bills = await res.json();
+
+        const tbody = document.getElementById('billsBody');
+        tbody.innerHTML = '';
+
+        bills.forEach(bill => {
+            const row = document.createElement('tr');
+
+            row.innerHTML = `
+                <td>${bill.id}</td>
+                <td>${bill.date}</td>
+                <td>$${bill.total}</td>
+                <td><button style="background:#17a2b8;color:white;">View</button></td>
+            `;
+
+            row.querySelector('button').onclick = () => {
+                alert(JSON.stringify(bill.items, null, 2));
+            };
+
+            tbody.appendChild(row);
+        });
+
+    } catch (err) {
+        alert("Error loading bills");
+    }
+}
+</script>
+</body>
+</html>
